@@ -1,392 +1,354 @@
+import csv
+import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
-session = requests.Session()
+BASE = "https://www.nseindia.com"
 
-headers = {
+HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nseindia.com/",
-}
-
-# Establish NSE session
-session.get(
-    "https://www.nseindia.com/report-detail/fo_eq_security",
-    headers=headers,
-    timeout=30
-)
-
-# Test NIFTY 50 historical derivatives
-params = {
-    "from": "04-09-2026",
-    "to": "04-09-2026",
-    "instrumentType": "OPTIDX",
-    "symbol": "NIFTY",
-    "year": "2026",
-    "expiryDate": "08-SEP-2026",
-    "optionType": "CE",
-    "strikePrice": "24000",
-}
-
-response = session.get(
-    "https://www.nseindia.com/api/historicalOR/foCPV",
-    params=params,
-    headers=headers,
-    timeout=30
-)
-
-print("HTTP Status:", response.status_code)
-print(response.text)
-import csv
-import json
-import time
-from datetime import datetime, timedelta
-from pathlib import Path
-
-import requests
-
-
-BASE = "https://www.nseindia.com"
-HISTORICAL_API = BASE + "/api/historicalOR/foCPV"
-PREOPEN_API = BASE + "/api/market-data-pre-open?key=NIFTY"
-REPORT_PAGE = BASE + "/report-detail/eq_security"
-OPTION_INFO_API = BASE + "/api/option-chain-contract-info?symbol=NIFTY"
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/144.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-IN,en-US;q=0.9,en;q=0.8",
     "Referer": BASE + "/",
-    "X-Requested-With": "XMLHttpRequest",
 }
 
-
-def create_session():
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    response = session.get(REPORT_PAGE, timeout=30)
-
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"NSE session failed: HTTP {response.status_code}"
-        )
-
-    return session
+session = requests.Session()
+session.headers.update(HEADERS)
 
 
 def next_tuesday(d):
     days = (1 - d.weekday()) % 7
+    if days == 0:
+        days = 7
     return d + timedelta(days=days)
 
 
-def format_date(d):
-    return d.strftime("%d-%m-%Y")
+def nse_get(url, params=None):
+    r = session.get(url, params=params, timeout=30)
+    r.raise_for_status()
+    return r.json()
 
 
-def format_expiry(d):
-    return d.strftime("%d-%b-%Y").upper()
+# --------------------------------------------------
+# 1. Establish NSE session
+# --------------------------------------------------
+
+print("Opening NSE session...")
+
+session.get(
+    BASE + "/report-detail/fo_eq_security",
+    timeout=30
+)
+
+print("NSE session established.")
 
 
-def get_current_strikes(session, expiry):
-    response = session.get(
-        BASE + "/api/option-chain-v3",
-        params={
-            "type": "Indices",
-            "symbol": "NIFTY",
-            "expiry": format_expiry(expiry),
-        },
-        timeout=30,
+# --------------------------------------------------
+# 2. Find next Tuesday expiry
+# --------------------------------------------------
+
+today = datetime.now().date()
+expiry = next_tuesday(today)
+
+expiry_text = expiry.strftime("%d-%b-%Y").upper()
+print("Target expiry:", expiry_text)
+
+
+# --------------------------------------------------
+# 3. Get NIFTY option-chain strikes
+# --------------------------------------------------
+
+print("Getting NIFTY option-chain...")
+
+option_chain = nse_get(
+    BASE + "/api/option-chain-v3",
+    {
+        "type": "equity",
+        "symbol": "NIFTY",
+        "expiry": expiry_text
+    }
+)
+
+records = option_chain.get("records", {})
+data = records.get("data", [])
+
+strikes = set()
+
+for item in data:
+    strike = item.get("strikePrice")
+
+    if strike is not None:
+        strike = float(strike)
+
+        if strike % 100 == 0:
+            strikes.add(strike)
+
+strikes = sorted(strikes)
+
+print("100-point strikes found:", len(strikes))
+
+if not strikes:
+    raise Exception("No NIFTY 100-point strikes found.")
+
+
+# --------------------------------------------------
+# 4. Find latest trading date
+# --------------------------------------------------
+
+def historical_rows(date_obj, option_type, strike):
+    date_text = date_obj.strftime("%d-%m-%Y")
+
+    params = {
+        "from": date_text,
+        "to": date_text,
+        "instrumentType": "OPTIDX",
+        "symbol": "NIFTY",
+        "year": str(date_obj.year),
+        "expiryDate": expiry_text,
+        "optionType": option_type,
+        "strikePrice": str(int(strike)),
+    }
+
+    result = nse_get(
+        BASE + "/api/historicalOR/foCPV",
+        params
     )
 
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Option-chain request failed: HTTP {response.status_code}"
-        )
+    return result.get("data", [])
 
-    data = response.json()
 
-    rows = data.get("records", {}).get("data", [])
+print("Finding latest trading date...")
 
-    strikes = []
+latest_date = None
 
-    for row in rows:
+for back in range(0, 8):
+
+    test_date = today - timedelta(days=back)
+
+    for strike in [24000, 23900, 23800, 24100]:
+
         try:
-            strike = float(row["strikePrice"])
+            rows = historical_rows(
+                test_date,
+                "CE",
+                strike
+            )
 
-            if strike % 100 == 0:
-                strikes.append(int(strike))
+            if rows:
+                latest_date = test_date
+                break
 
         except Exception:
             pass
 
-    strikes = sorted(set(strikes))
-
-    if not strikes:
-        raise RuntimeError("No NIFTY 100-point strikes were found.")
-
-    return strikes
+    if latest_date:
+        break
 
 
-def get_historical_contract(
-    session,
-    trade_date,
-    expiry,
-    option_type,
-    strike,
-):
-    params = {
-        "from": format_date(trade_date),
-        "to": format_date(trade_date),
-        "instrumentType": "OPTIDX",
-        "symbol": "NIFTY",
-        "year": trade_date.year,
-        "expiryDate": format_expiry(expiry),
-        "optionType": option_type,
-        "strikePrice": f"{strike:.2f}",
-    }
-
-    for attempt in range(3):
-        try:
-            response = session.get(
-                HISTORICAL_API,
-                params=params,
-                timeout=30,
-            )
-
-            if response.status_code == 200:
-                payload = response.json()
-                rows = payload.get("data", [])
-
-                if rows:
-                    return rows[0]
-
-        except Exception as error:
-            if attempt == 2:
-                print(
-                    f"Failed {option_type} {strike}: {error}"
-                )
-
-        time.sleep(1)
-
-    return None
+if latest_date is None:
+    raise Exception("Could not find latest NIFTY trading date.")
 
 
-def find_latest_trading_date(session):
-    today = datetime.now().date()
-
-    for days_back in range(0, 8):
-        candidate = today - timedelta(days=days_back)
-
-        if candidate.weekday() >= 5:
-            continue
-
-        expiry = next_tuesday(candidate)
-
-        # Test one common 100-point strike.
-        test_strikes = [24000, 23900, 23800, 24100]
-
-        for strike in test_strikes:
-            row = get_historical_contract(
-                session,
-                candidate,
-                expiry,
-                "CE",
-                strike,
-            )
-
-            if row:
-                return candidate, expiry
-
-    raise RuntimeError(
-        "Could not find the latest NIFTY trading date."
-    )
+print(
+    "Trading date:",
+    latest_date.strftime("%d-%m-%Y")
+)
 
 
-def convert_row(row):
-    def number(name):
-        value = row.get(name)
+# --------------------------------------------------
+# 5. Download CE + PE historical data
+# --------------------------------------------------
 
-        if value in (None, "", "-"):
-            return ""
+output_rows = []
 
-        try:
-            return float(value)
-        except Exception:
-            return value
+for strike in strikes:
 
-    traded_value = number("FH_TOT_TRADED_VAL")
-    premium_value = number("CALCULATED_PREMIUM_VAL")
+    for option_type in ["CE", "PE"]:
 
-    if isinstance(traded_value, (int, float)):
-        traded_value = traded_value / 100000
-
-    if isinstance(premium_value, (int, float)):
-        premium_value = premium_value / 100000
-
-    return [
-        row.get("FH_TIMESTAMP", ""),
-        row.get("FH_EXPIRY_DT", ""),
-        row.get("FH_OPTION_TYPE", ""),
-        number("FH_STRIKE_PRICE"),
-        number("FH_OPENING_PRICE"),
-        number("FH_TRADE_HIGH_PRICE"),
-        number("FH_TRADE_LOW_PRICE"),
-        number("FH_CLOSING_PRICE"),
-        number("FH_LAST_TRADED_PRICE"),
-        number("FH_SETTLE_PRICE"),
-        number("FH_TOT_TRADED_QTY"),
-        traded_value,
-        premium_value,
-        number("FH_OPEN_INT"),
-        number("FH_CHANGE_IN_OI"),
-    ]
-
-
-def download_nifty_data(session):
-    trade_date, expiry = find_latest_trading_date(session)
-
-    print(
-        "Trading date:",
-        trade_date.strftime("%d-%m-%Y"),
-    )
-
-    print(
-        "Expiry:",
-        expiry.strftime("%d-%m-%Y"),
-    )
-
-    strikes = get_current_strikes(session, expiry)
-
-    print("100-point strikes found:", len(strikes))
-
-    output = Path("nifty_latest.csv")
-
-    headers = [
-        "Date",
-        "Expiry Date",
-        "Option Type",
-        "Strike Price",
-        "Open Price",
-        "High Price",
-        "Low Price",
-        "Close Price",
-        "Last Price",
-        "Settlement Price",
-        "Volume",
-        "Value (₹ Lakhs)",
-        "Premium Value (₹ Lakhs)",
-        "Open Interest",
-        "Change in OI",
-    ]
-
-    rows = []
-
-    for strike in strikes:
-        for option_type in ("CE", "PE"):
-
-            row = get_historical_contract(
-                session,
-                trade_date,
-                expiry,
-                option_type,
-                strike,
-            )
-
-            if row:
-                rows.append(convert_row(row))
-
-    rows.sort(
-        key=lambda x: (
-            x[3],
-            x[2],
+        print(
+            "Downloading",
+            option_type,
+            int(strike)
         )
-    )
 
-    with output.open(
-        "w",
-        newline="",
-        encoding="utf-8",
-    ) as file:
+        try:
 
-        writer = csv.writer(file)
-        writer.writerow(headers)
-        writer.writerows(rows)
+            rows = historical_rows(
+                latest_date,
+                option_type,
+                strike
+            )
 
-    print("Rows written:", len(rows))
-    print("Created:", output)
+            if not rows:
+                continue
+
+            row = rows[0]
+
+            output_rows.append([
+                latest_date.strftime("%d-%b-%Y"),
+                expiry.strftime("%d-%b-%Y"),
+                option_type,
+                float(strike),
+
+                float(row.get("FH_OPENING_PRICE", 0) or 0),
+                float(row.get("FH_TRADE_HIGH_PRICE", 0) or 0),
+                float(row.get("FH_TRADE_LOW_PRICE", 0) or 0),
+                float(row.get("FH_CLOSING_PRICE", 0) or 0),
+                float(row.get("FH_LAST_TRADED_PRICE", 0) or 0),
+                float(row.get("FH_SETTLE_PRICE", 0) or 0),
+
+                float(row.get("FH_TOT_TRADED_QTY", 0) or 0),
+
+                float(row.get("FH_TOT_TRADED_VAL", 0) or 0) / 100000,
+
+                float(row.get("CALCULATED_PREMIUM_VAL", 0) or 0) / 100000,
+
+                float(row.get("FH_OPEN_INT", 0) or 0),
+
+                float(row.get("FH_CHANGE_IN_OI", 0) or 0),
+            ])
+
+        except Exception as e:
+
+            print(
+                "Skipped",
+                option_type,
+                int(strike),
+                ":",
+                e
+            )
 
 
-def download_premarket(session):
-    now = datetime.now()
+# --------------------------------------------------
+# 6. Write exact Raw Data CSV
+# --------------------------------------------------
 
-    # Only attempt the NSE pre-open request around 09:00-09:15 IST.
-    if not (
-        now.hour == 9
-        and 0 <= now.minute <= 15
-    ):
-        result = {
+headers = [
+    "Date",
+    "Expiry Date",
+    "Option Type",
+    "Strike Price",
+    "Open Price",
+    "High Price",
+    "Low Price",
+    "Close Price",
+    "Last Price",
+    "Settlement Price",
+    "Volume",
+    "Value (₹ Lakhs)",
+    "Premium Value (₹ Lakhs)",
+    "Open Interest",
+    "Change in OI"
+]
+
+with open(
+    "nifty_latest.csv",
+    "w",
+    newline="",
+    encoding="utf-8"
+) as f:
+
+    writer = csv.writer(f)
+
+    writer.writerow(headers)
+
+    for row in output_rows:
+        writer.writerow(row)
+
+
+print(
+    "Rows written:",
+    len(output_rows)
+)
+
+print("Created: nifty_latest.csv")
+
+
+# --------------------------------------------------
+# 7. Pre-market NIFTY value
+# --------------------------------------------------
+
+premarket = {
+    "value": None,
+    "status": "outside_preopen_window"
+}
+
+now = datetime.now()
+
+# GitHub runner time is UTC.
+# 09:00-09:15 IST = 03:30-03:45 UTC.
+
+utc_minutes = now.hour * 60 + now.minute
+
+if 210 <= utc_minutes <= 225:
+
+    print("Pre-market window detected.")
+
+    try:
+
+        response = nse_get(
+            BASE + "/api/market-data-pre-open",
+            {
+                "key": "NIFTY"
+            }
+        )
+
+        nifty_value = None
+
+        for item in response.get("data", []):
+
+            if item.get("index") == "NIFTY 50":
+
+                nifty_value = item.get("last")
+                break
+
+        if nifty_value is not None:
+
+            premarket = {
+                "value": float(nifty_value),
+                "status": "success"
+            }
+
+            print(
+                "Pre-market NIFTY:",
+                nifty_value
+            )
+
+        else:
+
+            premarket = {
+                "value": None,
+                "status": "nifty_value_not_found"
+            }
+
+            print("NIFTY pre-market value not found.")
+
+    except Exception as e:
+
+        premarket = {
             "value": None,
-            "status": "outside_preopen_window",
+            "status": "error",
+            "message": str(e)
         }
 
-        Path("premarket.json").write_text(
-            json.dumps(result),
-            encoding="utf-8",
+        print(
+            "Pre-market error:",
+            e
         )
 
-        print("Pre-market skipped: outside 09:00-09:15 IST.")
-        return
 
-    response = session.get(
-        PREOPEN_API,
-        timeout=30,
+with open(
+    "premarket.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
+    json.dump(
+        premarket,
+        f,
+        indent=2
     )
 
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Pre-open request failed: HTTP {response.status_code}"
-        )
 
-    payload = response.json()
-
-    nifty_value = None
-
-    for item in payload.get("data", []):
-        if item.get("index") == "NIFTY 50":
-            nifty_value = item.get("last")
-            break
-
-    if nifty_value is None:
-        raise RuntimeError(
-            "NIFTY 50 indicative pre-market value was not found."
-        )
-
-    result = {
-        "value": float(nifty_value),
-        "status": "ok",
-        "timestamp": now.strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-    }
-
-    Path("premarket.json").write_text(
-        json.dumps(result),
-        encoding="utf-8",
-    )
-
-    print("NIFTY pre-market:", nifty_value)
-
-
-def main():
-    session = create_session()
-
-    download_nifty_data(session)
-    download_premarket(session)
-
-
-if __name__ == "__main__":
-    main()
+print("Created: premarket.json")
+print("Finished.")
