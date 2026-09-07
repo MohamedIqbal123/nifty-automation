@@ -1,7 +1,14 @@
-name: Test NSE Bridge
+name: NSE Bridge
 
 on:
   workflow_dispatch:
+
+  schedule:
+    - cron: "38 3 * * 1-5"
+    - cron: "0 12 * * 1-5"
+
+permissions:
+  contents: write
 
 jobs:
   test:
@@ -14,10 +21,24 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.x"
 
       - name: Install requests
         run: pip install requests
 
       - name: Run NSE bridge
         run: python nse_bridge.py
+
+      - name: Save NSE data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add nifty_latest.csv
+
+          if [ -f premarket.json ]; then
+            git add premarket.json
+          fi
+
+          git diff --cached --quiet || git commit -m "Update NSE data"
+          git push
