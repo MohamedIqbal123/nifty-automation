@@ -337,17 +337,21 @@ if 210 <= utc_minutes <= 225:
         )
 
 
-with open(
-    "premarket.json",
-    "w",
-    encoding="utf-8"
-) as f:
+if 210 <= utc_minutes <= 225:
+    with open(
+        "premarket.json",
+        "w",
+        encoding="utf-8"
+    ) as f:
+        json.dump(
+            premarket,
+            f,
+            indent=2
+        )
 
-    json.dump(
-        premarket,
-        f,
-        indent=2
-    )
+    print("Updated premarket.json")
+else:
+    print("Outside pre-market window; keeping existing premarket.json")
 
 
 print("Created: premarket.json")
