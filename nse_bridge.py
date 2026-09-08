@@ -379,4 +379,38 @@ print("CSV data changed:", status["data_changed"])
 print("Status saved: nse_status.json")
 
 print("Created: premarket.json")
+print("Created: premarket.json")
+
+# 9. Get NIFTY 50 closing price
+nifty_close = None
+
+try:
+    response = nse_get(
+        BASE + "/api/market-data-pre-open",
+        {
+            "key": "NIFTY"
+        }
+    )
+
+    for item in response.get("data", []):
+        if item.get("index") == "NIFTY 50":
+            nifty_close = item.get("previousClose")
+            break
+
+except Exception as e:
+    print("NIFTY close error:", e)
+
+with open("nifty_close.json", "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "value": nifty_close,
+            "status": "success" if nifty_close is not None else "not_found"
+        },
+        f,
+        indent=2
+    )
+
+print("NIFTY 50 close:", nifty_close)
+
+print("Finished.")
 print("Finished.")
