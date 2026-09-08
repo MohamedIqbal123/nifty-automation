@@ -1,6 +1,7 @@
 import csv
 import json
 import requests
+import hashlib
 from datetime import datetime, timedelta
 
 BASE = "https://www.nseindia.com"
@@ -352,7 +353,32 @@ if 210 <= utc_minutes <= 225:
     print("Updated premarket.json")
 else:
     print("Outside pre-market window; keeping existing premarket.json")
+# 8. Verify whether the CSV content changed
+new_csv_bytes = open("nifty_latest.csv", "rb").read()
+new_hash = hashlib.sha256(new_csv_bytes).hexdigest()
 
+old_hash = None
+try:
+    with open("nse_status.json", "r", encoding="utf-8") as f:
+        old_status = json.load(f)
+        old_hash = old_status.get("csv_hash")
+except Exception:
+    pass
+
+status = {
+    "source_trading_date": latest_date.strftime("%d-%b-%Y"),
+    "expiry_date": expiry.strftime("%d-%b-%Y"),
+    "rows": len(output_rows),
+    "generated_at_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    "csv_hash": new_hash,
+    "data_changed": old_hash != new_hash
+}
+
+with open("nse_status.json", "w", encoding="utf-8") as f:
+    json.dump(status, f, indent=2)
+
+print("CSV data changed:", status["data_changed"])
+print("Status saved: nse_status.json")
 
 print("Created: premarket.json")
 print("Finished.")
