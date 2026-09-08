@@ -411,6 +411,8 @@ with open("nifty_close.json", "w", encoding="utf-8") as f:
     )
 
 print("NIFTY 50 close:", nifty_close)
+status["nifty_close"] = nifty_close
 
-print("Finished.")
+with open("nse_status.json", "w", encoding="utf-8") as f:
+    json.dump(status, f, indent=2)
 print("Finished.")
