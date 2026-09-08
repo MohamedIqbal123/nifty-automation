@@ -47,9 +47,15 @@ print("NSE session established.")
 # --------------------------------------------------
 
 today = datetime.now().date()
-expiry = today if today.weekday() == 1 else next_tuesday(today)
+
+expiry = (
+    today
+    if today.weekday() == 1
+    else next_tuesday(today)
+)
 
 expiry_text = expiry.strftime("%d-%b-%Y").upper()
+
 print("Target expiry:", expiry_text)
 
 
@@ -74,9 +80,11 @@ data = records.get("data", [])
 strikes = set()
 
 for item in data:
+
     strike = item.get("strikePrice")
 
     if strike is not None:
+
         strike = float(strike)
 
         if strike % 100 == 0:
@@ -84,10 +92,15 @@ for item in data:
 
 strikes = sorted(strikes)
 
-print("100-point strikes found:", len(strikes))
+print(
+    "100-point strikes found:",
+    len(strikes)
+)
 
 if not strikes:
-    raise Exception("No NIFTY 100-point strikes found.")
+    raise Exception(
+        "No NIFTY 100-point strikes found."
+    )
 
 
 # --------------------------------------------------
@@ -95,6 +108,7 @@ if not strikes:
 # --------------------------------------------------
 
 def historical_rows(date_obj, option_type, strike):
+
     date_text = date_obj.strftime("%d-%m-%Y")
 
     params = {
@@ -124,9 +138,15 @@ for back in range(0, 8):
 
     test_date = today - timedelta(days=back)
 
-    for strike in [24000, 23900, 23800, 24100]:
+    for strike in [
+        24000,
+        23900,
+        23800,
+        24100
+    ]:
 
         try:
+
             rows = historical_rows(
                 test_date,
                 "CE",
@@ -134,10 +154,12 @@ for back in range(0, 8):
             )
 
             if rows:
+
                 latest_date = test_date
                 break
 
         except Exception:
+
             pass
 
     if latest_date:
@@ -145,7 +167,10 @@ for back in range(0, 8):
 
 
 if latest_date is None:
-    raise Exception("Could not find latest NIFTY trading date.")
+
+    raise Exception(
+        "Could not find latest NIFTY trading date."
+    )
 
 
 print(
@@ -184,27 +209,95 @@ for strike in strikes:
             row = rows[0]
 
             output_rows.append([
-                latest_date.strftime("%d-%b-%Y"),
-                expiry.strftime("%d-%b-%Y"),
+
+                latest_date.strftime(
+                    "%d-%b-%Y"
+                ),
+
+                expiry.strftime(
+                    "%d-%b-%Y"
+                ),
+
                 option_type,
+
                 float(strike),
 
-                float(row.get("FH_OPENING_PRICE", 0) or 0),
-                float(row.get("FH_TRADE_HIGH_PRICE", 0) or 0),
-                float(row.get("FH_TRADE_LOW_PRICE", 0) or 0),
-                float(row.get("FH_CLOSING_PRICE", 0) or 0),
-                float(row.get("FH_LAST_TRADED_PRICE", 0) or 0),
-                float(row.get("FH_SETTLE_PRICE", 0) or 0),
+                float(
+                    row.get(
+                        "FH_OPENING_PRICE",
+                        0
+                    ) or 0
+                ),
 
-                float(row.get("FH_TOT_TRADED_QTY", 0) or 0),
+                float(
+                    row.get(
+                        "FH_TRADE_HIGH_PRICE",
+                        0
+                    ) or 0
+                ),
 
-                float(row.get("FH_TOT_TRADED_VAL", 0) or 0) / 100000,
+                float(
+                    row.get(
+                        "FH_TRADE_LOW_PRICE",
+                        0
+                    ) or 0
+                ),
 
-                float(row.get("CALCULATED_PREMIUM_VAL", 0) or 0) / 100000,
+                float(
+                    row.get(
+                        "FH_CLOSING_PRICE",
+                        0
+                    ) or 0
+                ),
 
-                float(row.get("FH_OPEN_INT", 0) or 0),
+                float(
+                    row.get(
+                        "FH_LAST_TRADED_PRICE",
+                        0
+                    ) or 0
+                ),
 
-                float(row.get("FH_CHANGE_IN_OI", 0) or 0),
+                float(
+                    row.get(
+                        "FH_SETTLE_PRICE",
+                        0
+                    ) or 0
+                ),
+
+                float(
+                    row.get(
+                        "FH_TOT_TRADED_QTY",
+                        0
+                    ) or 0
+                ),
+
+                float(
+                    row.get(
+                        "FH_TOT_TRADED_VAL",
+                        0
+                    ) or 0
+                ) / 100000,
+
+                float(
+                    row.get(
+                        "CALCULATED_PREMIUM_VAL",
+                        0
+                    ) or 0
+                ) / 100000,
+
+                float(
+                    row.get(
+                        "FH_OPEN_INT",
+                        0
+                    ) or 0
+                ),
+
+                float(
+                    row.get(
+                        "FH_CHANGE_IN_OI",
+                        0
+                    ) or 0
+                ),
             ])
 
         except Exception as e:
@@ -219,7 +312,7 @@ for strike in strikes:
 
 
 # --------------------------------------------------
-# 6. Write exact Raw Data CSV
+# 6. Write Raw Data CSV
 # --------------------------------------------------
 
 headers = [
@@ -252,6 +345,7 @@ with open(
     writer.writerow(headers)
 
     for row in output_rows:
+
         writer.writerow(row)
 
 
@@ -260,7 +354,9 @@ print(
     len(output_rows)
 )
 
-print("Created: nifty_latest.csv")
+print(
+    "Created: nifty_latest.csv"
+)
 
 
 # --------------------------------------------------
@@ -277,11 +373,16 @@ now = datetime.now()
 # GitHub runner time is UTC.
 # 09:00-09:15 IST = 03:30-03:45 UTC.
 
-utc_minutes = now.hour * 60 + now.minute
+utc_minutes = (
+    now.hour * 60
+    + now.minute
+)
 
 if 210 <= utc_minutes <= 225:
 
-    print("Pre-market window detected.")
+    print(
+        "Pre-market window detected."
+    )
 
     try:
 
@@ -294,11 +395,19 @@ if 210 <= utc_minutes <= 225:
 
         nifty_value = None
 
-        for item in response.get("data", []):
+        for item in response.get(
+            "data",
+            []
+        ):
 
-            if item.get("index") == "NIFTY 50":
+            if item.get(
+                "index"
+            ) == "NIFTY 50":
 
-                nifty_value = item.get("last")
+                nifty_value = item.get(
+                    "last"
+                )
+
                 break
 
         if nifty_value is not None:
@@ -320,7 +429,9 @@ if 210 <= utc_minutes <= 225:
                 "status": "nifty_value_not_found"
             }
 
-            print("NIFTY pre-market value not found.")
+            print(
+                "NIFTY pre-market value not found."
+            )
 
     except Exception as e:
 
@@ -337,82 +448,174 @@ if 210 <= utc_minutes <= 225:
 
 
 if 210 <= utc_minutes <= 225:
+
     with open(
         "premarket.json",
         "w",
         encoding="utf-8"
     ) as f:
+
         json.dump(
             premarket,
             f,
             indent=2
         )
 
-    print("Updated premarket.json")
+    print(
+        "Updated premarket.json"
+    )
+
 else:
-    print("Outside pre-market window; keeping existing premarket.json")
-# 8. Verify whether the CSV content changed
-new_csv_bytes = open("nifty_latest.csv", "rb").read()
-new_hash = hashlib.sha256(new_csv_bytes).hexdigest()
+
+    print(
+        "Outside pre-market window; "
+        "keeping existing premarket.json"
+    )
+
+
+# --------------------------------------------------
+# 8. Verify whether CSV content changed
+# --------------------------------------------------
+
+with open(
+    "nifty_latest.csv",
+    "rb"
+) as f:
+
+    new_csv_bytes = f.read()
+
+new_hash = hashlib.sha256(
+    new_csv_bytes
+).hexdigest()
+
 
 old_hash = None
+
 try:
-    with open("nse_status.json", "r", encoding="utf-8") as f:
+
+    with open(
+        "nse_status.json",
+        "r",
+        encoding="utf-8"
+    ) as f:
+
         old_status = json.load(f)
-        old_hash = old_status.get("csv_hash")
+
+        old_hash = old_status.get(
+            "csv_hash"
+        )
+
 except Exception:
+
     pass
 
+
 status = {
-    "source_trading_date": latest_date.strftime("%d-%b-%Y"),
-    "expiry_date": expiry.strftime("%d-%b-%Y"),
-    "rows": len(output_rows),
-    "generated_at_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-    "csv_hash": new_hash,
-    "data_changed": old_hash != new_hash
+    "source_trading_date":
+        latest_date.strftime("%d-%b-%Y"),
+
+    "expiry_date":
+        expiry.strftime("%d-%b-%Y"),
+
+    "rows":
+        len(output_rows),
+
+    "generated_at_utc":
+        datetime.utcnow().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+
+    "csv_hash":
+        new_hash,
+
+    "data_changed":
+        old_hash != new_hash
 }
 
-with open("nse_status.json", "w", encoding="utf-8") as f:
-    json.dump(status, f, indent=2)
 
-print("CSV data changed:", status["data_changed"])
-print("Status saved: nse_status.json")
-
-print("Created: premarket.json")
-print("Created: premarket.json")
-
+# --------------------------------------------------
 # 9. Get NIFTY 50 closing price
+# --------------------------------------------------
+
 nifty_close = None
 
 try:
+
+    date_text = latest_date.strftime(
+        "%d-%m-%Y"
+    )
+
     response = nse_get(
-        BASE + "/api/market-data-pre-open",
+        BASE + "/api/historical/indicesHistory",
         {
-            "key": "NIFTY"
+            "indexType": "NIFTY 50",
+            "from": date_text,
+            "to": date_text
         }
     )
 
-    for item in response.get("data", []):
-        if item.get("index") == "NIFTY 50":
-            nifty_close = item.get("previousClose")
-            break
+    records = response.get(
+        "data",
+        {}
+    ).get(
+        "indexCloseOnlineRecords",
+        []
+    )
+
+    if records:
+
+        close_value = records[0].get(
+            "EOD_CLOSE_INDEX_VAL"
+        )
+
+        if close_value is not None:
+
+            nifty_close = float(
+                close_value
+            )
 
 except Exception as e:
-    print("NIFTY close error:", e)
 
-with open("nifty_close.json", "w", encoding="utf-8") as f:
+    print(
+        "NIFTY close error:",
+        e
+    )
+
+
+print(
+    "NIFTY 50 close:",
+    nifty_close
+)
+
+
+# --------------------------------------------------
+# 10. Save final NSE status
+# --------------------------------------------------
+
+status["nifty_close"] = nifty_close
+
+with open(
+    "nse_status.json",
+    "w",
+    encoding="utf-8"
+) as f:
+
     json.dump(
-        {
-            "value": nifty_close,
-            "status": "success" if nifty_close is not None else "not_found"
-        },
+        status,
         f,
         indent=2
     )
 
-print("NIFTY 50 close:", nifty_close)
-status["nifty_close"] = nifty_close
 
-with open("nse_status.json", "w", encoding="utf-8") as f:
-    json.dump(status, f, indent=2)
-print("Finished.")
+print(
+    "CSV data changed:",
+    status["data_changed"]
+)
+
+print(
+    "Status saved: nse_status.json"
+)
+
+print(
+    "Finished."
+)
