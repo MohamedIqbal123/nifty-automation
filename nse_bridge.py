@@ -47,7 +47,7 @@ print("NSE session established.")
 # --------------------------------------------------
 
 today = datetime.now().date()
-expiry = next_tuesday(today)
+expiry = today if today.weekday() == 1 else next_tuesday(today)
 
 expiry_text = expiry.strftime("%d-%b-%Y").upper()
 print("Target expiry:", expiry_text)
