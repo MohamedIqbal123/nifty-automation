@@ -456,19 +456,12 @@ premarket = {
     "status": "outside_preopen_window"
 }
 
-
-now = datetime.utcnow()
-
-
-# NSE pre-open approximately 09:00-09:15 IST.
-# GitHub Actions uses UTC.
-# Window intentionally widened for GitHub Actions delay.
+now = datetime.now()
 
 utc_minutes = (
     now.hour * 60
     + now.minute
 )
-
 
 if 205 <= utc_minutes <= 235:
 
@@ -485,8 +478,7 @@ if 205 <= utc_minutes <= 235:
             }
         )
 
-
-               nifty_value = None
+        nifty_value = None
 
         for item in response.get(
             "data",
@@ -498,19 +490,21 @@ if 205 <= utc_minutes <= 235:
                 {}
             )
 
-            symbol = (
-                metadata.get("symbol")
-                or item.get("symbol")
+            symbol = metadata.get(
+                "symbol"
             )
 
             if symbol == "NIFTY 50":
 
-                nifty_value = (
-                    metadata.get("iep")
-                    or metadata.get("lastPrice")
-                    or item.get("iep")
-                    or item.get("lastPrice")
+                nifty_value = metadata.get(
+                    "lastPrice"
                 )
+
+                if nifty_value is None:
+
+                    nifty_value = metadata.get(
+                        "iep"
+                    )
 
                 break
 
@@ -521,12 +515,10 @@ if 205 <= utc_minutes <= 235:
                 "status": "success"
             }
 
-
             print(
                 "Pre-market NIFTY:",
                 nifty_value
             )
-
 
         else:
 
@@ -535,11 +527,9 @@ if 205 <= utc_minutes <= 235:
                 "status": "nifty_value_not_found"
             }
 
-
             print(
                 "NIFTY pre-market value not found."
             )
-
 
     except Exception as e:
 
@@ -549,12 +539,12 @@ if 205 <= utc_minutes <= 235:
             "message": str(e)
         }
 
-
         print(
             "Pre-market error:",
             e
         )
 
+if 205 <= utc_minutes <= 235:
 
     with open(
         "premarket.json",
@@ -568,11 +558,9 @@ if 205 <= utc_minutes <= 235:
             indent=2
         )
 
-
     print(
         "Updated premarket.json"
     )
-
 
 else:
 
@@ -580,7 +568,6 @@ else:
         "Outside pre-market window; "
         "keeping existing premarket.json"
     )
-
 
 # --------------------------------------------------
 # 8. Verify whether CSV content changed
