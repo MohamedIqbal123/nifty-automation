@@ -671,47 +671,22 @@ status = {
 
 nifty_close = None
 
-
 try:
 
     response = nse_get(
-        BASE + "/api/equity-stockIndices",
-        {
-            "index": "NIFTY 50"
-        }
+        BASE + "/api/marketStatus"
     )
 
-
-    index_data = response.get(
-        "data",
+    market_states = response.get(
+        "marketState",
         []
     )
 
+    for item in market_states:
 
-    for item in index_data:
+        if item.get("index") == "NIFTY 50":
 
-        if item.get(
-            "symbol"
-        ) == "NIFTY 50":
-
-            if latest_date == today:
-
-                close_value = item.get(
-                    "lastPrice"
-                )
-
-                if close_value is None:
-
-                    close_value = item.get(
-                        "previousClose"
-                    )
-
-            else:
-
-                close_value = item.get(
-                    "previousClose"
-                )
-
+            close_value = item.get("last")
 
             if close_value is not None:
 
@@ -719,9 +694,7 @@ try:
                     close_value
                 )
 
-
             break
-
 
 except Exception as e:
 
@@ -730,12 +703,10 @@ except Exception as e:
         e
     )
 
-
 print(
     "NIFTY 50 close:",
     nifty_close
 )
-
 
 # --------------------------------------------------
 # 10. Save final NSE status
