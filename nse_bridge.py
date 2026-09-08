@@ -4,7 +4,9 @@ import requests
 import hashlib
 from datetime import datetime, timedelta
 
+
 BASE = "https://www.nseindia.com"
+
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -13,18 +15,28 @@ HEADERS = {
     "Referer": BASE + "/",
 }
 
+
 session = requests.Session()
 session.headers.update(HEADERS)
 
 
 def next_tuesday(d):
+
     days = (1 - d.weekday()) % 7
+
     return d + timedelta(days=days)
 
 
 def nse_get(url, params=None):
-    r = session.get(url, params=params, timeout=30)
+
+    r = session.get(
+        url,
+        params=params,
+        timeout=30
+    )
+
     r.raise_for_status()
+
     return r.json()
 
 
@@ -34,10 +46,12 @@ def nse_get(url, params=None):
 
 print("Opening NSE session...")
 
+
 session.get(
     BASE + "/report-detail/fo_eq_security",
     timeout=30
 )
+
 
 print("NSE session established.")
 
@@ -48,22 +62,33 @@ print("NSE session established.")
 
 today = datetime.now().date()
 
+
 expiry = (
     today
     if today.weekday() == 1
     else next_tuesday(today)
 )
 
-expiry_text = expiry.strftime("%d-%b-%Y").upper()
 
-print("Target expiry:", expiry_text)
+expiry_text = expiry.strftime(
+    "%d-%b-%Y"
+).upper()
+
+
+print(
+    "Target expiry:",
+    expiry_text
+)
 
 
 # --------------------------------------------------
 # 3. Get NIFTY option-chain strikes
 # --------------------------------------------------
 
-print("Getting NIFTY option-chain...")
+print(
+    "Getting NIFTY option-chain..."
+)
+
 
 option_chain = nse_get(
     BASE + "/api/option-chain-v3",
@@ -74,30 +99,50 @@ option_chain = nse_get(
     }
 )
 
-records = option_chain.get("records", {})
-data = records.get("data", [])
+
+records = option_chain.get(
+    "records",
+    {}
+)
+
+
+data = records.get(
+    "data",
+    []
+)
+
 
 strikes = set()
 
+
 for item in data:
 
-    strike = item.get("strikePrice")
+    strike = item.get(
+        "strikePrice"
+    )
 
     if strike is not None:
 
         strike = float(strike)
 
         if strike % 100 == 0:
+
             strikes.add(strike)
 
-strikes = sorted(strikes)
+
+strikes = sorted(
+    strikes
+)
+
 
 print(
     "100-point strikes found:",
     len(strikes)
 )
 
+
 if not strikes:
+
     raise Exception(
         "No NIFTY 100-point strikes found."
     )
@@ -107,9 +152,16 @@ if not strikes:
 # 4. Find latest trading date
 # --------------------------------------------------
 
-def historical_rows(date_obj, option_type, strike):
+def historical_rows(
+    date_obj,
+    option_type,
+    strike
+):
 
-    date_text = date_obj.strftime("%d-%m-%Y")
+    date_text = date_obj.strftime(
+        "%d-%m-%Y"
+    )
+
 
     params = {
         "from": date_text,
@@ -122,21 +174,33 @@ def historical_rows(date_obj, option_type, strike):
         "strikePrice": str(int(strike)),
     }
 
+
     result = nse_get(
         BASE + "/api/historicalOR/foCPV",
         params
     )
 
-    return result.get("data", [])
+
+    return result.get(
+        "data",
+        []
+    )
 
 
-print("Finding latest trading date...")
+print(
+    "Finding latest trading date..."
+)
+
 
 latest_date = None
 
+
 for back in range(0, 8):
 
-    test_date = today - timedelta(days=back)
+    test_date = today - timedelta(
+        days=back
+    )
+
 
     for strike in [
         24000,
@@ -153,16 +217,21 @@ for back in range(0, 8):
                 strike
             )
 
+
             if rows:
 
                 latest_date = test_date
+
                 break
+
 
         except Exception:
 
             pass
 
+
     if latest_date:
+
         break
 
 
@@ -175,7 +244,9 @@ if latest_date is None:
 
 print(
     "Trading date:",
-    latest_date.strftime("%d-%m-%Y")
+    latest_date.strftime(
+        "%d-%m-%Y"
+    )
 )
 
 
@@ -185,15 +256,20 @@ print(
 
 output_rows = []
 
+
 for strike in strikes:
 
-    for option_type in ["CE", "PE"]:
+    for option_type in [
+        "CE",
+        "PE"
+    ]:
 
         print(
             "Downloading",
             option_type,
             int(strike)
         )
+
 
         try:
 
@@ -203,10 +279,14 @@ for strike in strikes:
                 strike
             )
 
+
             if not rows:
+
                 continue
 
+
             row = rows[0]
+
 
             output_rows.append([
 
@@ -298,7 +378,9 @@ for strike in strikes:
                         0
                     ) or 0
                 ),
+
             ])
+
 
         except Exception as e:
 
@@ -316,22 +398,39 @@ for strike in strikes:
 # --------------------------------------------------
 
 headers = [
+
     "Date",
+
     "Expiry Date",
+
     "Option Type",
+
     "Strike Price",
+
     "Open Price",
+
     "High Price",
+
     "Low Price",
+
     "Close Price",
+
     "Last Price",
+
     "Settlement Price",
+
     "Volume",
+
     "Value (₹ Lakhs)",
+
     "Premium Value (₹ Lakhs)",
+
     "Open Interest",
+
     "Change in OI"
+
 ]
+
 
 with open(
     "nifty_latest.csv",
@@ -342,17 +441,24 @@ with open(
 
     writer = csv.writer(f)
 
-    writer.writerow(headers)
+
+    writer.writerow(
+        headers
+    )
+
 
     for row in output_rows:
 
-        writer.writerow(row)
+        writer.writerow(
+            row
+        )
 
 
 print(
     "Rows written:",
     len(output_rows)
 )
+
 
 print(
     "Created: nifty_latest.csv"
@@ -368,7 +474,9 @@ premarket = {
     "status": "outside_preopen_window"
 }
 
+
 now = datetime.now()
+
 
 # GitHub runner time is UTC.
 # 09:00-09:15 IST = 03:30-03:45 UTC.
@@ -378,11 +486,13 @@ utc_minutes = (
     + now.minute
 )
 
+
 if 210 <= utc_minutes <= 225:
 
     print(
         "Pre-market window detected."
     )
+
 
     try:
 
@@ -393,7 +503,9 @@ if 210 <= utc_minutes <= 225:
             }
         )
 
+
         nifty_value = None
+
 
         for item in response.get(
             "data",
@@ -410,6 +522,7 @@ if 210 <= utc_minutes <= 225:
 
                 break
 
+
         if nifty_value is not None:
 
             premarket = {
@@ -417,10 +530,12 @@ if 210 <= utc_minutes <= 225:
                 "status": "success"
             }
 
+
             print(
                 "Pre-market NIFTY:",
                 nifty_value
             )
+
 
         else:
 
@@ -429,9 +544,11 @@ if 210 <= utc_minutes <= 225:
                 "status": "nifty_value_not_found"
             }
 
+
             print(
                 "NIFTY pre-market value not found."
             )
+
 
     except Exception as e:
 
@@ -440,6 +557,7 @@ if 210 <= utc_minutes <= 225:
             "status": "error",
             "message": str(e)
         }
+
 
         print(
             "Pre-market error:",
@@ -461,9 +579,11 @@ if 210 <= utc_minutes <= 225:
             indent=2
         )
 
+
     print(
         "Updated premarket.json"
     )
+
 
 else:
 
@@ -484,12 +604,14 @@ with open(
 
     new_csv_bytes = f.read()
 
+
 new_hash = hashlib.sha256(
     new_csv_bytes
 ).hexdigest()
 
 
 old_hash = None
+
 
 try:
 
@@ -499,11 +621,15 @@ try:
         encoding="utf-8"
     ) as f:
 
-        old_status = json.load(f)
+        old_status = json.load(
+            f
+        )
+
 
         old_hash = old_status.get(
             "csv_hash"
         )
+
 
 except Exception:
 
@@ -511,11 +637,16 @@ except Exception:
 
 
 status = {
+
     "source_trading_date":
-        latest_date.strftime("%d-%b-%Y"),
+        latest_date.strftime(
+            "%d-%b-%Y"
+        ),
 
     "expiry_date":
-        expiry.strftime("%d-%b-%Y"),
+        expiry.strftime(
+            "%d-%b-%Y"
+        ),
 
     "rows":
         len(output_rows),
@@ -530,6 +661,7 @@ status = {
 
     "data_changed":
         old_hash != new_hash
+
 }
 
 
@@ -539,40 +671,57 @@ status = {
 
 nifty_close = None
 
+
 try:
 
-    date_text = latest_date.strftime(
-        "%d-%m-%Y"
-    )
-
     response = nse_get(
-        BASE + "/api/historical/indicesHistory",
+        BASE + "/api/equity-stockIndices",
         {
-            "indexType": "NIFTY 50",
-            "from": date_text,
-            "to": date_text
+            "index": "NIFTY 50"
         }
     )
 
-    records = response.get(
+
+    index_data = response.get(
         "data",
-        {}
-    ).get(
-        "indexCloseOnlineRecords",
         []
     )
 
-    if records:
 
-        close_value = records[0].get(
-            "EOD_CLOSE_INDEX_VAL"
-        )
+    for item in index_data:
 
-        if close_value is not None:
+        if item.get(
+            "symbol"
+        ) == "NIFTY 50":
 
-            nifty_close = float(
-                close_value
-            )
+            if latest_date == today:
+
+                close_value = item.get(
+                    "lastPrice"
+                )
+
+                if close_value is None:
+
+                    close_value = item.get(
+                        "previousClose"
+                    )
+
+            else:
+
+                close_value = item.get(
+                    "previousClose"
+                )
+
+
+            if close_value is not None:
+
+                nifty_close = float(
+                    close_value
+                )
+
+
+            break
+
 
 except Exception as e:
 
@@ -594,6 +743,7 @@ print(
 
 status["nifty_close"] = nifty_close
 
+
 with open(
     "nse_status.json",
     "w",
@@ -612,9 +762,11 @@ print(
     status["data_changed"]
 )
 
+
 print(
     "Status saved: nse_status.json"
 )
+
 
 print(
     "Finished."
