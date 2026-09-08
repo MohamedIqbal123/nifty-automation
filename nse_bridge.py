@@ -21,9 +21,7 @@ session.headers.update(HEADERS)
 
 
 def next_tuesday(d):
-
     days = (1 - d.weekday()) % 7
-
     return d + timedelta(days=days)
 
 
@@ -400,33 +398,19 @@ for strike in strikes:
 headers = [
 
     "Date",
-
     "Expiry Date",
-
     "Option Type",
-
     "Strike Price",
-
     "Open Price",
-
     "High Price",
-
     "Low Price",
-
     "Close Price",
-
     "Last Price",
-
     "Settlement Price",
-
     "Volume",
-
     "Value (₹ Lakhs)",
-
     "Premium Value (₹ Lakhs)",
-
     "Open Interest",
-
     "Change in OI"
 
 ]
@@ -441,11 +425,9 @@ with open(
 
     writer = csv.writer(f)
 
-
     writer.writerow(
         headers
     )
-
 
     for row in output_rows:
 
@@ -474,15 +456,19 @@ premarket = {
     "status": "outside_preopen_window"
 }
 
-now = datetime.now()
 
-# NSE pre-open: 09:00-09:15 IST
-# GitHub Actions runs in UTC: 03:30-03:45 UTC
+now = datetime.utcnow()
+
+
+# NSE pre-open approximately 09:00-09:15 IST.
+# GitHub Actions uses UTC.
+# Window intentionally widened for GitHub Actions delay.
 
 utc_minutes = (
     now.hour * 60
     + now.minute
 )
+
 
 if 205 <= utc_minutes <= 235:
 
@@ -499,7 +485,8 @@ if 205 <= utc_minutes <= 235:
             }
         )
 
-        nifty_value = None
+
+               nifty_value = None
 
         for item in response.get(
             "data",
@@ -511,21 +498,19 @@ if 205 <= utc_minutes <= 235:
                 {}
             )
 
-            symbol = metadata.get(
-                "symbol"
+            symbol = (
+                metadata.get("symbol")
+                or item.get("symbol")
             )
 
             if symbol == "NIFTY 50":
 
-                nifty_value = metadata.get(
-                    "lastPrice"
+                nifty_value = (
+                    metadata.get("iep")
+                    or metadata.get("lastPrice")
+                    or item.get("iep")
+                    or item.get("lastPrice")
                 )
-
-                if nifty_value is None:
-
-                    nifty_value = metadata.get(
-                        "iep"
-                    )
 
                 break
 
@@ -536,10 +521,12 @@ if 205 <= utc_minutes <= 235:
                 "status": "success"
             }
 
+
             print(
                 "Pre-market NIFTY:",
                 nifty_value
             )
+
 
         else:
 
@@ -548,9 +535,11 @@ if 205 <= utc_minutes <= 235:
                 "status": "nifty_value_not_found"
             }
 
+
             print(
                 "NIFTY pre-market value not found."
             )
+
 
     except Exception as e:
 
@@ -560,12 +549,12 @@ if 205 <= utc_minutes <= 235:
             "message": str(e)
         }
 
+
         print(
             "Pre-market error:",
             e
         )
 
-if 205 <= utc_minutes <= 235:
 
     with open(
         "premarket.json",
@@ -579,9 +568,11 @@ if 205 <= utc_minutes <= 235:
             indent=2
         )
 
+
     print(
         "Updated premarket.json"
     )
+
 
 else:
 
@@ -589,6 +580,7 @@ else:
         "Outside pre-market window; "
         "keeping existing premarket.json"
     )
+
 
 # --------------------------------------------------
 # 8. Verify whether CSV content changed
@@ -665,36 +657,61 @@ status = {
 # --------------------------------------------------
 # 9. Get NIFTY 50 closing price
 # --------------------------------------------------
+
 nifty_close = None
 
+
 try:
+
     response = nse_get(
         BASE + "/api/allIndices"
     )
 
-    indices = response.get("data", [])
+
+    indices = response.get(
+        "data",
+        []
+    )
+
 
     for item in indices:
 
-        if item.get("index") == "NIFTY 50":
+        index_name = (
+            item.get("index")
+            or item.get("indexName")
+        )
+
+
+        if index_name == "NIFTY 50":
 
             if latest_date == today:
-                nifty_close = float(item.get("last"))
+
+                nifty_close = float(
+                    item.get("last")
+                )
+
             else:
-                nifty_close = float(item.get("previousClose"))
+
+                nifty_close = float(
+                    item.get("previousClose")
+                )
 
             break
 
+
 except Exception as e:
+
     print(
         "NIFTY close error:",
         e
     )
 
+
 print(
     "NIFTY 50 close:",
     nifty_close
 )
+
 
 # --------------------------------------------------
 # 10. Save final NSE status
