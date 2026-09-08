@@ -19,8 +19,6 @@ session.headers.update(HEADERS)
 
 def next_tuesday(d):
     days = (1 - d.weekday()) % 7
-    if days == 0:
-        days = 7
     return d + timedelta(days=days)
 
 
