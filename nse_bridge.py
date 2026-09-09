@@ -494,7 +494,7 @@ if 205 <= utc_minutes <= 235:
                 "symbol"
             )
 
-            if symbol == "NIFTY 50":
+            if symbol in ["NIFTY 50", "NIFTY50", "NIFTY"]:
 
                 nifty_value = metadata.get(
                     "lastPrice"
