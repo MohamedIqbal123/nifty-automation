@@ -2,7 +2,7 @@ import csv
 import json
 import requests
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 BASE = "https://www.nseindia.com"
@@ -628,7 +628,7 @@ status = {
         len(output_rows),
 
     "generated_at_utc":
-        datetime.utcnow().strftime(
+        datetime.now(timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S"
         ),
 
