@@ -671,17 +671,9 @@ try:
 
         if index_name == "NIFTY 50":
 
-            if latest_date == today:
-
-                nifty_close = float(
-                    item.get("last")
-                )
-
-            else:
-
-                nifty_close = float(
-                    item.get("previousClose")
-                )
+            nifty_close = float(
+                item.get("last")
+            )
 
             break
 
