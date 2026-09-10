@@ -531,6 +531,10 @@ if 205 <= utc_minutes <= 235:
                 "NIFTY pre-market value not found."
             )
 
+            print(
+                "Raw response was:", response
+            )
+
     except Exception as e:
 
         premarket = {
