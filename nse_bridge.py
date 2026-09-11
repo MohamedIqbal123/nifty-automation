@@ -463,7 +463,7 @@ utc_minutes = (
     + now.minute
 )
 
-if True:
+if 205 <= utc_minutes <= 235:
 
     print(
         "Pre-market window detected."
