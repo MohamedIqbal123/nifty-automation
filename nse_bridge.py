@@ -471,14 +471,23 @@ if 205 <= utc_minutes <= 235:
 
     try:
 
-        response = nse_get(
-            BASE + "/api/market-data-pre-open",
-            {
-                "key": "NIFTY"
-            }
-        )
-
         nifty_value = None
+        response = {"data": []}
+
+        for attempt in range(4):
+
+            response = nse_get(
+                BASE + "/api/market-data-pre-open",
+                {
+                    "key": "NIFTY"
+                }
+            )
+
+            if response.get("data"):
+                break
+
+            import time
+            time.sleep(5)
 
         for item in response.get(
             "data",
