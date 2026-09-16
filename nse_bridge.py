@@ -476,6 +476,11 @@ if 205 <= utc_minutes <= 235:
 
         for attempt in range(4):
 
+            session.get(
+                BASE + "/market-data/pre-open-market-cm-and-emerge-market",
+                timeout=30
+            )
+
             response = nse_get(
                 BASE + "/api/market-data-pre-open",
                 {
