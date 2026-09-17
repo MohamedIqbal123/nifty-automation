@@ -25,7 +25,10 @@ jobs:
           python-version: "3.x"
 
       - name: Install requests
-        run: pip install requests
+        run: pip install requests playwright
+
+      - name: Install Playwright browser
+        run: playwright install --with-deps chromium
 
       - name: Run NSE bridge
         run: python nse_bridge.py
