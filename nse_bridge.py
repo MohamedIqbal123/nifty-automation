@@ -478,9 +478,7 @@ if 205 <= utc_minutes <= 235:
 
         with sync_playwright() as p:
 
-            browser = p.chromium.launch(
-                headless=True
-            )
+            browser = p.chromium.launch(headless=True, args=["--disable-http2"])
 
             page = browser.new_page()
 
