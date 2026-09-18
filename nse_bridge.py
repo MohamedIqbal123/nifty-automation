@@ -448,7 +448,7 @@ print(
 
 
 # --------------------------------------------------
-# 7. Pre-market NIFTY value
+# 7. Pre-market NIFTY value (via headless browser)
 # --------------------------------------------------
 
 premarket = {
@@ -471,61 +471,45 @@ if 205 <= utc_minutes <= 235:
 
     try:
 
+        from playwright.sync_api import sync_playwright
+        import re
+
         nifty_value = None
-        response = {"data": []}
 
-        for attempt in range(4):
+        with sync_playwright() as p:
 
-            session.get(
-                BASE + "/market-data/pre-open-market-cm-and-emerge-market",
-                timeout=30
+            browser = p.chromium.launch(
+                headless=True
             )
 
-            response = nse_get(
-                BASE + "/api/market-data-pre-open",
-                {
-                    "key": "NIFTY"
-                }
+            page = browser.new_page()
+
+            page.goto(
+                "https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market",
+                timeout=60000
             )
 
-            if response.get("data"):
-                break
+            page.wait_for_timeout(6000)
 
-            import time
-            time.sleep(5)
+            body_text = page.inner_text("body")
 
-        for item in response.get(
-            "data",
-            []
-        ):
+            browser.close()
 
-            metadata = item.get(
-                "metadata",
-                {}
+        match = re.search(
+            r"Nifty\s*50\s*[\r\n]*\s*([\d,]+\.\d+)",
+            body_text
+        )
+
+        if match:
+
+            nifty_value = float(
+                match.group(1).replace(",", "")
             )
-
-            symbol = metadata.get(
-                "symbol"
-            )
-
-            if symbol in ["NIFTY 50", "NIFTY50", "NIFTY"]:
-
-                nifty_value = metadata.get(
-                    "lastPrice"
-                )
-
-                if nifty_value is None:
-
-                    nifty_value = metadata.get(
-                        "iep"
-                    )
-
-                break
 
         if nifty_value is not None:
 
             premarket = {
-                "value": float(nifty_value),
+                "value": nifty_value,
                 "status": "success"
             }
 
@@ -546,7 +530,8 @@ if 205 <= utc_minutes <= 235:
             )
 
             print(
-                "Raw response was:", response
+                "Page text snippet:",
+                body_text[:500]
             )
 
     except Exception as e:
