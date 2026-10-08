@@ -1,4 +1,5 @@
 {
-  "value": 22618.15,
-  "status": "success"
+  "value": null,
+  "status": "error",
+  "message": "Page.goto: Timeout 60000ms exceeded.\nCall log:\n  - navigating to \"https://www.nseindia.com/market-data/pre-open-market-cm-and-emerge-market\", waiting until \"load\"\n"
 }
