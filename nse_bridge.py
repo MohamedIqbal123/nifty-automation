@@ -1,5 +1,6 @@
 import csv
 import json
+import time
 import requests
 import hashlib
 from datetime import datetime, timedelta, timezone
@@ -16,26 +17,57 @@ HEADERS = {
 }
 
 
+# India time (GitHub servers run on UTC, so we convert)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+# Nifty weekly expiry day: Monday=0, Tuesday=1
+EXPIRY_WEEKDAY = 1
+
+# Backup holiday list, used only if NSE's holiday list cannot be loaded.
+# Format: "DD-Mon-YYYY". Add new holidays here if you ever need to.
+EXTRA_HOLIDAYS = [
+    "20-Oct-2026",
+]
+
+
 session = requests.Session()
 session.headers.update(HEADERS)
 
 
-def next_tuesday(d):
-    days = (1 - d.weekday()) % 7
-    return d + timedelta(days=days)
+def nse_get(url, params=None, retries=1):
+
+    last_error = None
+
+    for attempt in range(1, retries + 1):
+
+        try:
+
+            r = session.get(
+                url,
+                params=params,
+                timeout=30
+            )
+
+            r.raise_for_status()
+
+            return r.json()
+
+        except Exception as e:
+
+            last_error = e
+
+            if attempt < retries:
+                time.sleep(2 * attempt)
+
+    raise last_error
 
 
-def nse_get(url, params=None):
+def parse_d(text):
+    return datetime.strptime(text.strip(), "%d-%b-%Y").date()
 
-    r = session.get(
-        url,
-        params=params,
-        timeout=30
-    )
 
-    r.raise_for_status()
-
-    return r.json()
+def num(row, key, divisor=1):
+    return float(row.get(key, 0) or 0) / divisor
 
 
 # --------------------------------------------------
@@ -55,27 +87,113 @@ print("NSE session established.")
 
 
 # --------------------------------------------------
-# 2. Find next Tuesday expiry
+# 2. Find the correct expiry (holiday-proof)
 # --------------------------------------------------
 
-today = datetime.now().date()
+today = datetime.now(IST).date()
+
+print("Today (India):", today.strftime("%d-%b-%Y"))
 
 
-expiry = (
-    today
-    if today.weekday() == 1
-    else next_tuesday(today)
+def get_holidays():
+
+    days = set()
+
+    for text in EXTRA_HOLIDAYS:
+        days.add(parse_d(text))
+
+    try:
+
+        data = nse_get(
+            BASE + "/api/holiday-master",
+            {"type": "trading"},
+            retries=2
+        )
+
+        for item in data.get("FO", []):
+
+            try:
+                days.add(parse_d(item["tradingDate"]))
+            except Exception:
+                pass
+
+    except Exception as e:
+
+        print("Holiday list error (using backup list):", e)
+
+    return days
+
+
+def calc_expected_expiry(start, holidays):
+    """Next Tuesday on/after start. If that day is a weekend or
+    holiday, move back to the previous trading day."""
+
+    d = start
+
+    for _ in range(10):
+
+        while d.weekday() != EXPIRY_WEEKDAY:
+            d += timedelta(days=1)
+
+        e = d
+
+        while e.weekday() >= 5 or e in holidays:
+            e -= timedelta(days=1)
+
+        if e >= start:
+            return e
+
+        d += timedelta(days=1)
+
+    return start
+
+
+def get_nse_expiries():
+    """Expiry dates that NSE itself says exist."""
+
+    try:
+
+        info = nse_get(
+            BASE + "/api/option-chain-contract-info",
+            {"symbol": "NIFTY"},
+            retries=3
+        )
+
+        return sorted(
+            parse_d(x) for x in info.get("expiryDates", [])
+        )
+
+    except Exception as e:
+
+        print("NSE expiry list error:", e)
+
+        return []
+
+
+holidays = get_holidays()
+
+calc_first = calc_expected_expiry(today, holidays)
+
+calc_second = calc_expected_expiry(
+    calc_first + timedelta(days=1),
+    holidays
 )
 
+candidates = []
 
-expiry_text = expiry.strftime(
-    "%d-%b-%Y"
-).upper()
+for d in get_nse_expiries():
+    if d >= today and d not in candidates:
+        candidates.append(d)
 
+for d in [calc_first, calc_second]:
+    if d not in candidates:
+        candidates.append(d)
+
+candidates = candidates[:4]
 
 print(
-    "Target expiry:",
-    expiry_text
+    "Expiry candidates:",
+    ", ".join(d.strftime("%d-%b-%Y") for d in candidates)
 )
 
 
@@ -88,62 +206,78 @@ print(
 )
 
 
-option_chain = nse_get(
-    BASE + "/api/option-chain-v3",
-    {
-        "type": "equity",
-        "symbol": "NIFTY",
-        "expiry": expiry_text
-    }
-)
+strikes = []
+
+expiry = None
+
+expiry_text = None
 
 
-records = option_chain.get(
-    "records",
-    {}
-)
+for candidate in candidates:
 
+    expiry = candidate
 
-data = records.get(
-    "data",
-    []
-)
+    expiry_text = expiry.strftime("%d-%b-%Y").upper()
 
+    print("Trying expiry:", expiry_text)
 
-strikes = set()
+    try:
 
+        option_chain = nse_get(
+            BASE + "/api/option-chain-v3",
+            {
+                "type": "equity",
+                "symbol": "NIFTY",
+                "expiry": expiry_text
+            },
+            retries=3
+        )
 
-for item in data:
+    except Exception as e:
 
-    strike = item.get(
-        "strikePrice"
+        print("Option-chain error:", e)
+
+        continue
+
+    records = option_chain.get("records", {})
+
+    data = records.get("data", [])
+
+    found = set()
+
+    for item in data:
+
+        strike = item.get("strikePrice")
+
+        if strike is not None:
+
+            strike = float(strike)
+
+            if strike % 100 == 0:
+
+                found.add(strike)
+
+    print(
+        "100-point strikes found:",
+        len(found)
     )
 
-    if strike is not None:
+    if found:
 
-        strike = float(strike)
+        strikes = sorted(found)
 
-        if strike % 100 == 0:
-
-            strikes.add(strike)
-
-
-strikes = sorted(
-    strikes
-)
-
-
-print(
-    "100-point strikes found:",
-    len(strikes)
-)
+        break
 
 
 if not strikes:
 
     raise Exception(
-        "No NIFTY 100-point strikes found."
+        "No NIFTY 100-point strikes found for: "
+        + ", ".join(d.strftime("%d-%b-%Y") for d in candidates)
     )
+
+
+print("Using expiry:", expiry_text)
 
 
 # --------------------------------------------------
@@ -190,6 +324,15 @@ print(
 )
 
 
+# Strikes from the middle of the real list (near the current price),
+# plus your original four as backup.
+mid = len(strikes) // 2
+
+test_strikes = [
+    int(s) for s in strikes[max(0, mid - 2): mid + 2]
+] + [24000, 23900, 23800, 24100]
+
+
 latest_date = None
 
 
@@ -200,12 +343,7 @@ for back in range(0, 8):
     )
 
 
-    for strike in [
-        24000,
-        23900,
-        23800,
-        24100
-    ]:
+    for strike in test_strikes:
 
         try:
 
@@ -288,94 +426,35 @@ for strike in strikes:
 
             output_rows.append([
 
-                latest_date.strftime(
-                    "%d-%b-%Y"
-                ),
+                latest_date.strftime("%d-%b-%Y"),
 
-                expiry.strftime(
-                    "%d-%b-%Y"
-                ),
+                expiry.strftime("%d-%b-%Y"),
 
                 option_type,
 
                 float(strike),
 
-                float(
-                    row.get(
-                        "FH_OPENING_PRICE",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_OPENING_PRICE"),
 
-                float(
-                    row.get(
-                        "FH_TRADE_HIGH_PRICE",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_TRADE_HIGH_PRICE"),
 
-                float(
-                    row.get(
-                        "FH_TRADE_LOW_PRICE",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_TRADE_LOW_PRICE"),
 
-                float(
-                    row.get(
-                        "FH_CLOSING_PRICE",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_CLOSING_PRICE"),
 
-                float(
-                    row.get(
-                        "FH_LAST_TRADED_PRICE",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_LAST_TRADED_PRICE"),
 
-                float(
-                    row.get(
-                        "FH_SETTLE_PRICE",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_SETTLE_PRICE"),
 
-                float(
-                    row.get(
-                        "FH_TOT_TRADED_QTY",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_TOT_TRADED_QTY"),
 
-                float(
-                    row.get(
-                        "FH_TOT_TRADED_VAL",
-                        0
-                    ) or 0
-                ) / 100000,
+                num(row, "FH_TOT_TRADED_VAL", 100000),
 
-                float(
-                    row.get(
-                        "CALCULATED_PREMIUM_VAL",
-                        0
-                    ) or 0
-                ) / 100000,
+                num(row, "CALCULATED_PREMIUM_VAL", 100000),
 
-                float(
-                    row.get(
-                        "FH_OPEN_INT",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_OPEN_INT"),
 
-                float(
-                    row.get(
-                        "FH_CHANGE_IN_OI",
-                        0
-                    ) or 0
-                ),
+                num(row, "FH_CHANGE_IN_OI"),
 
             ])
 
