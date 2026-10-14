@@ -1,9 +1,9 @@
 {
   "source_trading_date": "13-Oct-2026",
-  "expiry_date": "13-Oct-2026",
-  "rows": 108,
-  "generated_at_utc": "2026-10-13 17:32:43",
-  "csv_hash": "11c40419851bd7d121e9036d67985811fdbac5bbabf030ad5fa64bc04926abd6",
+  "expiry_date": "19-Oct-2026",
+  "rows": 104,
+  "generated_at_utc": "2026-10-14 13:42:42",
+  "csv_hash": "20ddcf67d434ba81c00381821b9c9be238f6bb5796ea84c388ccad674feb1470",
   "data_changed": true,
-  "nifty_close": 22721.95
+  "nifty_close": 22622.7
 }
