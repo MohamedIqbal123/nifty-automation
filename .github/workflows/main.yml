@@ -4,9 +4,16 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "35-41 3 * * 1-5"
     - cron: "35 2 * * 1-5"
+    - cron: "35-41 3 * * 1-5"
     - cron: "15,20,25 10 * * 1-5"
+    - cron: "30 10 * * 1-5"
+
+# Times above are UTC. India time = UTC + 5:30
+#   35 2        -> 8:05 AM IST  (morning CSV)
+#   35-41 3     -> 9:05 to 9:11 AM IST (pre-market value)
+#   15,20,25 10 -> 3:45, 3:50, 3:55 PM IST (closing value)
+#   30 10       -> 4:00 PM IST (backup closing run)
 
 permissions:
   contents: write
